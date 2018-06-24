@@ -4,4 +4,4 @@ project(Spy_The_Spies)
 set(CMAKE_CXX_STANDARD 11)
 
 add_executable(Spy_The_Spies
-        spy_the_spies.cpp)
+        spy_the_spies.cpp stl_overloads.h)

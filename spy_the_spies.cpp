@@ -9,17 +9,12 @@
 #include <sstream>
 #include <regex>
 #include <cassert>
-
+#include <queue>
 using namespace std;
 
 template <class TInputContainer, class OIter>
 OIter copy(TInputContainer container, OIter out_it) {
     return copy(container.begin(), container.end(), out_it);
-};
-
-template<class TContainer, class TPred>
-bool all_of(TContainer container, TPred pred) {
-    return copy(container.begin(), container.end(), pred);
 };
 
 
@@ -100,7 +95,7 @@ public:
     explicit State(vector<Feature>&& features)
         : features_(std::move(features)) {}
 
-    void getPossibleNextStates(vector<State*>& next_states) {
+    void getPossibleNextStates(vector<State*>& next_states, vector<Move>& moves) {
 
     }
 
@@ -199,16 +194,42 @@ int main()
     cerr << "features:\n" ;//<< curr_id + 1;
     for (auto& feature : features) {
         cerr << feature.to_string() << "\n";
+    }//endregion
+
+    auto* start_state = new State(std::move(features));
+
+    // TODO: use doubly-linked tree of Moves instead?
+    // and delete states on the fly, after we've added adjacent
+    // { state : { , prev state } }
+    unordered_map<State*, pair<Move, State*>> came_from;
+    came_from.insert(make_pair(start_state,
+                               make_pair(Move{-1, false}, nullptr)));
+
+    queue<State*> states;
+    states.push(start_state);
+
+    vector<State*> next_states;
+    vector<Move> moves;
+
+    while (! states.empty()) {
+        auto* curr_state = states.front();
+        states.pop();
+
+        if(curr_state->onlySpiesLeft()) {
+            break;
+        }
+
+        curr_state->getPossibleNextStates(next_states, moves);
+        for (int i = 0; i < next_states.size(); ++i) {
+            came_from.insert(make_pair(next,
+                                       make_pair(curr_state, moves.at(i))));
+            states.push(next_states.at(i));
+        }
     }
 
-    State start_state(std::move(features));
+    // get moves sequence
 
 
-    //endregion
-
-//    State* start_state = new State();
-    // Write an action using cout. DON'T FORGET THE "<< endl"
-    // To debug: cerr << "Debug messages..." << endl;
 
     cout << "answer" << endl;
 }
