@@ -201,6 +201,24 @@ private:
 
 int main()
 {
+    stringstream cin;
+    cin << "Fred Mark Kim Anita Dwayne Nick\n"
+           "Daniel 1 chinese\n"
+           "Clem 1 german\n"
+           "Dwayne 1 french\n"
+           "Anita 1 french\n"
+           "Spruce 1 german\n"
+           "Fred 1 french\n"
+           "Adan 1 chinese\n"
+           "Sven 1 irish\n"
+           "Nick 1 french\n"
+           "Tim 1 irish\n"
+           "Harley 1 english\n"
+           "Mary 1 russian\n"
+           "Kim 1 french\n"
+           "Rashad 1 chinese\n"
+           "Mark 1 french\n";
+
     //region input
     const int kSuspectCount = 15;
 
@@ -264,7 +282,7 @@ int main()
 
     cerr << "features:\n" ;//<< curr_id + 1;
     for (auto& feature : features) {
-        cerr << feature.to_string() << "\n";
+        cerr <<  feature_names.at(feature.id) << " : " << feature.to_string() << "\n";
     }//endregion
 
     auto* start_state = new State(std::move(features));
@@ -302,8 +320,11 @@ int main()
     // get moves sequence
     stack<Command> commands;
     State* curr_state = winning_state;
-    while (curr_state != nullptr) {
+    while (true) {
         auto move = came_from.at(curr_state);
+        if(move.first == nullptr) {
+            break;
+        }
         commands.emplace(move.second);
         curr_state = move.first;
     }
@@ -316,7 +337,7 @@ int main()
         if(! move.indicates_spies) {
             cout << "NOT ";
         }
-        cout << feature_names.at(move.feature_id);
+        cout << feature_names.at(move.feature_id) << endl;
     }
 
     cout << "answer" << endl;
