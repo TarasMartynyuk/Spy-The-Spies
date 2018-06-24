@@ -17,27 +17,37 @@ OIter copy(TInputContainer container, OIter out_it) {
     return copy(container.begin(), container.end(), out_it);
 };
 
+template <class TIter1, class TIter2>
+bool areDisjoint(TIter1 container, TIter2 other_container) {
+    vector<typename TIter1::value_type> intersection;
+    set_intersection(container.begin(), container.end(),
+                    other_container.begin(), other_container.end(),
+                    intersection.begin());
+
+    return intersection.empty();
+};
+
 
 struct Feature  {
 public:
     const int id;
     Feature(const int id) : id(id) {}
 
-    int spiesCount()
-        { return spies_.size(); }
-    int innocentsCount()
-        { return innocents_.size(); }
+    Feature(const int id, unordered_set<int>&& spies, unordered_set<int>&& innocents)
+        : id(id), spies_(spies), innocents_(innocents) {}
 
-    void addSpy(int spy)
-        {
-            spies_.insert(spy);
-            assert(spiesAndInnocentsAreDiscjoint());
-        }
-    void addInnocent(int innocent)
-        {
-            innocents_.insert(innocent);
-            assert(spiesAndInnocentsAreDiscjoint());
-        }
+
+    const unordered_set<int> spies()const { return spies_; }
+    const unordered_set<int> innocents()const { return innocents_; }
+
+    void addSpy(int spy) {
+        spies_.emplace(spy);
+        assert(spiesAndInnocentsAreDisjoint());
+    }
+    void addInnocent(int innocent) {
+        innocents_.emplace(innocent);
+        assert(spiesAndInnocentsAreDisjoint());
+    }
 
     string to_string() {
         stringstream ss;
@@ -54,16 +64,17 @@ private:
     unordered_set<int> spies_;
     unordered_set<int> innocents_;
 
-    bool spiesAndInnocentsAreDiscjoint() {
-        vector<int> intercetion;
-        set_intersection(spies_.begin(), spies_.end(),
-                         innocents_.begin(), innocents_.end() ,
-                         intercetion.begin());
-        return intercetion.empty();
+    bool spiesAndInnocentsAreDisjoint() {
+//        vector<int> intercetion;
+//        set_intersection(spies_.begin(), spies_.end(),
+//                         innocents_.begin(), innocents_.end() ,
+//                         intercetion.begin());
+//        return intercetion.empty();
+        return areDisjoint(spies(), innocents());
     }
 };
 
-struct Move {
+struct Command {
     // what feature to mark
     int feature_id;
     // if false - indicates innocent
@@ -95,38 +106,98 @@ public:
     explicit State(vector<Feature>&& features)
         : features_(std::move(features)) {}
 
-    void getPossibleNextStates(vector<State*>& next_states, vector<Move>& moves) {
-
+    bool onlySpiesLeft() {
+        return all_of(features().begin(), features().end(),
+                     [](const Feature& feature) {
+                         return feature.innocents().size() == 0;
+        });
     }
 
-    bool onlySpiesLeft() {
+    const vector<Feature>& features() const { return features_; }
 
+    State* indicateSpiesHaveFeature(const Feature& indicated_feature) const {
+        vector<Feature> new_features;
+        new_features.reserve(features_.size() - 1);
+
+        for (auto& feature : features_) {
+            if(feature.id != indicated_feature.id) {
+                unordered_set<int> new_spies;
+                new_spies.reserve(feature.spies().size());
+
+                for(int spy : feature.spies()) {
+                    if(indicated_feature.spies().count(spy) == 0) {
+                        new_spies.emplace(spy);
+                    }
+                }
+                unordered_set<int> innocents_copy(feature.innocents());
+
+                new_features.emplace_back(feature.id,
+                                          move(new_spies), move(innocents_copy));
+            }
+        }
+        assert(all_of(new_features.begin(), new_features.end(),
+                     [&indicated_feature](Feature f) {
+                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
+                                areDisjoint(f.innocents(), indicated_feature.spies());
+            }));
+        return new State(move(new_features));
+    }
+    State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
+        vector<Feature> new_features;
+        new_features.reserve(features_.size() - 1);
+
+        for (auto& feature : features_) {
+            if (feature.id != indicated_feature.id) {
+                unordered_set<int> new_innocents;
+                new_innocents.reserve(feature.innocents().size());
+
+                for (int innocent : feature.innocents()) {
+                    if(indicated_feature.innocents().count(innocent) == 0) {
+                        new_innocents.emplace(innocent);
+                    }
+                }
+                unordered_set<int> spies_copy(feature.spies());
+
+                new_features.emplace_back(feature.id,
+                                          move(spies_copy), move(new_innocents));
+            }
+        }
+        assert(all_of(new_features.begin(), new_features.end(),
+                      [&indicated_feature](Feature f) {
+                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
+                                 areDisjoint(f.innocents(), indicated_feature.innocents());
+                      }));
+        return new State(move(new_features));
     }
 
 private:
     vector<Feature> features_;
-
-    State* indicateSpiesHaveFeature(int feature_id) {
-
-    }
-    State* indicateInnocentsHaveFeature(int feature_id) {
-
-    }
-    void getSpyOnlyFeatures(vector<int>& spy_only_features) {
-
-    }
-    void getInnocentOnlyFeatures(vector<int>& innocent_only_features) {
-
-    }
-    // if false, some innocent has the feature
-    bool anySpyHasFeature(int feature_id) {
-
-    }
-    // if false, some spy has the feature
-    bool anyInnocentHasFeature(int feature_id) {
-
-    }
 };
+
+class PossibleMovesCalculator {
+public:
+    const vector<pair<State*, Command>>& possibleMoves() {return possible_moves; }
+
+    void calculatePossibleMoves(const State& state) {
+        possible_moves.clear();
+        for (auto& feature : state.features()) {
+            if (feature.innocents().empty()) {
+                auto* indicate_spies_state = state.indicateSpiesHaveFeature(feature);
+                possible_moves.emplace_back(
+                    indicate_spies_state, Command {feature.id, true});
+            }
+            if(feature.spies().empty()) {
+                auto* indicate_innocents_state = state.indicateInnocentsHaveFeature(feature);
+                possible_moves.emplace_back(
+                    indicate_innocents_state, Command{ feature.id, false });
+            }
+        }
+    }
+
+private:
+    vector<pair<State*, Command>> possible_moves;
+};
+
 
 int main()
 {
@@ -201,35 +272,52 @@ int main()
     // TODO: use doubly-linked tree of Moves instead?
     // and delete states on the fly, after we've added adjacent
     // { state : { , prev state } }
-    unordered_map<State*, pair<Move, State*>> came_from;
+    unordered_map<State*, pair<State *, Command>> came_from;
     came_from.insert(make_pair(start_state,
-                               make_pair(Move{-1, false}, nullptr)));
+                               make_pair(nullptr, Command{ -1, false })));
 
     queue<State*> states;
     states.push(start_state);
 
-    vector<State*> next_states;
-    vector<Move> moves;
+    PossibleMovesCalculator movesCalculator;
+    State* winning_state;
 
     while (! states.empty()) {
         auto* curr_state = states.front();
         states.pop();
 
         if(curr_state->onlySpiesLeft()) {
+            winning_state = curr_state;
             break;
         }
 
-        curr_state->getPossibleNextStates(next_states, moves);
-        for (int i = 0; i < next_states.size(); ++i) {
-            came_from.insert(make_pair(next,
-                                       make_pair(curr_state, moves.at(i))));
-            states.push(next_states.at(i));
+        movesCalculator.calculatePossibleMoves(*curr_state);
+        for (auto& move : movesCalculator.possibleMoves()) {
+            came_from.insert(make_pair(move.first,
+                                       make_pair(curr_state, move.second)));
+            states.push(move.first);
         }
     }
 
     // get moves sequence
+    stack<Command> commands;
+    State* curr_state = winning_state;
+    while (curr_state != nullptr) {
+        auto move = came_from.at(curr_state);
+        commands.emplace(move.second);
+        curr_state = move.first;
+    }
 
+    cerr << "\n";
+    while(! commands.empty()) {
+        auto move = commands.top();
+        commands.pop();
 
+        if(! move.indicates_spies) {
+            cout << "NOT ";
+        }
+        cout << feature_names.at(move.feature_id);
+    }
 
     cout << "answer" << endl;
 }
