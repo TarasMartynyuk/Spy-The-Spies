@@ -1,3 +1,4 @@
+#define NDEBUG
 #include <iostream>
 #include <string>
 #include <utility>
@@ -42,19 +43,19 @@ public:
 
     void addSpy(int spy) {
         spies_.emplace(spy);
-        assert(spiesAndInnocentsAreDisjoint());
+//        assert(spiesAndInnocentsAreDisjoint());
     }
     void addInnocent(int innocent) {
         innocents_.emplace(innocent);
-        assert(spiesAndInnocentsAreDisjoint());
+//        assert(spiesAndInnocentsAreDisjoint());
     }
 
     string to_string() {
         stringstream ss;
-        ss << "{ id : " << id << ",\n" << "\tspies:";
+        ss << "{ id : " << id << ",\n" << "\tspies: ";
         ostream_iterator<int> ostream_it(ss, ", ");
         copy(spies_, ostream_it);
-        ss << "\n\tinnocents:";
+        ss << "\n\tinnocents: ";
         copy(innocents_, ostream_it);
         ss << "\n}";
 
@@ -109,8 +110,15 @@ public:
     bool onlySpiesLeft() {
         return all_of(features().begin(), features().end(),
                      [](const Feature& feature) {
-                         return feature.innocents().size() == 0;
+                         return feature.spies().size() == 0;
         });
+    }
+
+    bool onlyInnocentsLeft() {
+        return all_of(features().begin(), features().end(),
+                      [](const Feature& feature) {
+                          return feature.innocents().size() == 0;
+                      });
     }
 
     const vector<Feature>& features() const { return features_; }
@@ -135,11 +143,11 @@ public:
                                           move(new_spies), move(innocents_copy));
             }
         }
-        assert(all_of(new_features.begin(), new_features.end(),
-                     [&indicated_feature](Feature f) {
-                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
-                                areDisjoint(f.innocents(), indicated_feature.spies());
-            }));
+//        assert(all_of(new_features.begin(), new_features.end(),
+//                     [&indicated_feature](Feature f) {
+//                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
+//                                areDisjoint(f.innocents(), indicated_feature.spies());
+//            }));
         return new State(move(new_features));
     }
     State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
@@ -162,11 +170,11 @@ public:
                                           move(spies_copy), move(new_innocents));
             }
         }
-        assert(all_of(new_features.begin(), new_features.end(),
-                      [&indicated_feature](Feature f) {
-                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
-                                 areDisjoint(f.innocents(), indicated_feature.innocents());
-                      }));
+//        assert(all_of(new_features.begin(), new_features.end(),
+//                      [&indicated_feature](Feature f) {
+//                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
+//                                 areDisjoint(f.innocents(), indicated_feature.innocents());
+//                      }));
         return new State(move(new_features));
     }
 
@@ -198,28 +206,76 @@ private:
     vector<pair<State*, Command>> possible_moves;
 };
 
+void constructMovePathAndPrintAnswer(State* winning_state,
+                                     const unordered_map<State*, pair<State*, Command>>& came_from,
+                                     const vector<string>& feature_names) {
+    // get moves sequence
+    stack<Command> commands;
+    State* curr_state = winning_state;
+    while (true) {
+        auto move = came_from.at(curr_state);
+        if (move.first == nullptr) {
+            break;
+        }
+        commands.emplace(move.second);
+        curr_state = move.first;
+    }
+
+    cerr << "\n";
+    while (!commands.empty()) {
+        auto move = commands.top();
+        commands.pop();
+
+        if (!move.indicates_spies) {
+            cout << "NOT ";
+        }
+        cout << feature_names.at(move.feature_id) << endl;
+    }
+}
 
 int main()
 {
-    stringstream cin;
-    cin << "Fred Mark Kim Anita Dwayne Nick\n"
-           "Daniel 1 chinese\n"
-           "Clem 1 german\n"
-           "Dwayne 1 french\n"
-           "Anita 1 french\n"
-           "Spruce 1 german\n"
-           "Fred 1 french\n"
-           "Adan 1 chinese\n"
-           "Sven 1 irish\n"
-           "Nick 1 french\n"
-           "Tim 1 irish\n"
-           "Harley 1 english\n"
-           "Mary 1 russian\n"
-           "Kim 1 french\n"
-           "Rashad 1 chinese\n"
-           "Mark 1 french\n";
+    //region mock
+//
+//    stringstream cin;
+//    cin << "Fred Mark Kim Anita Dwayne Nick\n"
+//           "Daniel 1 chinese\n"
+//           "Clem 1 german\n"
+//           "Dwayne 1 french\n"
+//           "Anita 1 french\n"
+//           "Spruce 1 german\n"
+//           "Fred 1 french\n"
+//           "Adan 1 chinese\n"
+//           "Sven 1 irish\n"
+//           "Nick 1 french\n"
+//           "Tim 1 irish\n"
+//           "Harley 1 english\n"
+//           "Mary 1 russian\n"
+//           "Kim 1 french\n"
+//           "Rashad 1 chinese\n"
+//           "Mark 1 french\n";
+
+    //    stringstream cin;
+    //    cin << "Tabitha  Rolf Derick Ronaldo Tempest Jeanne\n"
+//           "Tabitha 1 scottish \n"
+//           "Rolf 1 hebrew \n"
+//           "Mohammad 1 arabic \n"
+//           "Jacob 1 arabic \n"
+//           "Derick 1 hebrew \n"
+//           "Meta 1 arabic \n"
+//           "Ronaldo 1 scottish \n"
+//           "Melville 1 arabic \n"
+//           "Hermon 1 arabic \n"
+//           "Tempest 1 swedish \n"
+//           "Jeanne 1 persian \n"
+//           "Kourtney 1 arabic \n"
+//           "Dallas 1 arabic \n"
+//           "Vena 1 arabic \n"
+//           "Eros 1 arabic\n";
+     //endregion
 
     //region input
+    assert(false);
     const int kSuspectCount = 15;
 
     string enemy1, enemy2, enemy3, enemy4, enemy5, enemy6;
@@ -242,48 +298,54 @@ int main()
     int curr_id = 0;
 
     for (int suspect_id = 0; suspect_id < kSuspectCount; suspect_id++) {
-        string suspect_name; cin >> suspect_name; cin.ignore();
+        string suspect_name; cin >> suspect_name; cin.ignore(); //cerr << suspect_name << " ";
         suspect_names.at(suspect_id) = suspect_name;
 
         bool is_spy = spies.count(suspect_name) != 0;
         are_spies[suspect_id] = is_spy;
 
-        int feat_count; cin >> feat_count; cin.ignore();
+        int feat_count; cin >> feat_count; cin.ignore(); //cerr << feat_count << " ";
 
         for (int i = 0; i < feat_count; ++i) {
-            string feature_name; cin >> feature_name; cin.ignore();
-            feature_names.push_back(feature_name);
+            string feature_name; cin >> feature_name; cin.ignore(); //cerr << feature_name << " ";
 
             auto id_it = nameIdMap.find(feature_name);
+
             if(id_it == nameIdMap.end()) {
                 id_it = nameIdMap.insert(make_pair(
                     feature_name, curr_id)).first;
-                features.push_back(Feature(curr_id++));
+                feature_names.push_back(feature_name);
+
+//                assert(feature_names.size() == curr_id + 1);
+//                assert(feature_names.at(curr_id) == feature_name);
+
+                features.emplace_back(curr_id++);
             }
-            assert(id_it->second < curr_id);
+
+//            assert(id_it->second < curr_id);
             if(is_spy) {
                 features.at(id_it->second).addSpy(suspect_id);
             } else {
                 features.at(id_it->second).addInnocent(suspect_id);
             }
-
         }
+        cerr << "\n";
     }
 
-    for (int i = 0; i < features.size(); ++i)
-        { assert(features.at(i).id == i); }
+//    for (int i = 0; i < features.size(); ++i)
+//        { assert(features.at(i).id == i); }
 
-    cerr << "Suspects: \n";
-    for (int i = 0; i < suspect_names.size(); ++i) {
-        cerr << "\t" << suspect_names.at(i);
-        cerr << (are_spies.at(i) ?
-            " : spy,\n" : " : innocent,\n");
-    }
+//    cerr << "Suspects: \n";
+//    for (int i = 0; i < suspect_names.size(); ++i) {
+//        cerr << "\t" << suspect_names.at(i);
+//        cerr << (are_spies.at(i) ?
+//            " : spy,\n" : " : innocent,\n");
+//    }
 
-    cerr << "features:\n" ;//<< curr_id + 1;
-    for (auto& feature : features) {
-        cerr <<  feature_names.at(feature.id) << " : " << feature.to_string() << "\n";
-    }//endregion
+//    cerr << "features:\n" ;//<< curr_id + 1;
+//    for (auto& feature : features) {
+//        cerr <<  feature_names.at(feature.id) << " : " << feature.to_string() << "\n";
+//    }//endregion
 
     auto* start_state = new State(std::move(features));
 
@@ -304,7 +366,7 @@ int main()
         auto* curr_state = states.front();
         states.pop();
 
-        if(curr_state->onlySpiesLeft()) {
+        if(curr_state->onlySpiesLeft() || curr_state->onlyInnocentsLeft()) {
             winning_state = curr_state;
             break;
         }
@@ -317,28 +379,7 @@ int main()
         }
     }
 
-    // get moves sequence
-    stack<Command> commands;
-    State* curr_state = winning_state;
-    while (true) {
-        auto move = came_from.at(curr_state);
-        if(move.first == nullptr) {
-            break;
-        }
-        commands.emplace(move.second);
-        curr_state = move.first;
-    }
+    constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
 
-    cerr << "\n";
-    while(! commands.empty()) {
-        auto move = commands.top();
-        commands.pop();
-
-        if(! move.indicates_spies) {
-            cout << "NOT ";
-        }
-        cout << feature_names.at(move.feature_id) << endl;
-    }
-
-    cout << "answer" << endl;
+    //TODO: delete states - iter over came_from;
 }
