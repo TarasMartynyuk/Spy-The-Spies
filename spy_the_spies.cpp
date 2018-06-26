@@ -110,8 +110,14 @@ public:
     const int spies_left;
     const int innocents_left;
 
-    State(vector<Feature>&& features, int innocents_left, int spies_left)
-        : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left) {}
+    const int start_features_count;
+
+    State(vector<Feature>&& features,
+          int innocents_left,
+          int spies_left, const
+          int start_features_count)
+        : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left),
+        start_features_count(start_features_count) {}
 
     bool onlySpiesLeft()const {
         bool res = innocents_left == 0;
@@ -147,7 +153,7 @@ public:
             }));
         int new_spies_count = spies_left - indicated_feature.spies().size();
 
-        return new State(move(new_features), innocents_left, new_spies_count);
+        return new State(move(new_features), innocents_left, new_spies_count, start_features_count);
     }
     State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
         vector<Feature> new_features;
@@ -166,7 +172,7 @@ public:
                                  areDisjoint(f.innocents(), indicated_feature.innocents());
                       }));
         int new_innocents_count = innocents_left - indicated_feature.innocents().size();
-        return new State(move(new_features), new_innocents_count, spies_left);
+        return new State(move(new_features), new_innocents_count, spies_left, start_features_count);
     }
 
 private:
@@ -218,27 +224,30 @@ private:
 
 // heuristic distance - the lower, the closer we are to goal, hence the better
 
-struct HeuristicComparator {
+struct HeuristicPtrComparator {
     const int max_spies = 6;
     const int max_innocents = 9;
 
     // sorts descending
-    bool operator()(const State& left, const State& right) {
-        return heuristic(left) > heuristic(right);
+    bool operator()(const State* left, const State* right) {
+        return heuristic(*left) > heuristic(*right);
     }
 
     double heuristic(const State& state) {
-        return 3 * state.spies_left / static_cast<double>(max_spies) +
-               2 * state.innocents_left / static_cast<double>(max_innocents);
+        // range [0,  18 + 18] = [0, 36]
+        double win_distance = 3 * state.spies_left / static_cast<double>(max_spies) +
+                              2 * state.innocents_left / static_cast<double>(max_innocents);
+        // range [0, #features]
+        double start_distance = state.features().size() - state.start_features_count;
+
+        const double start_bias = 100000;
+        double scale = 36 / static_cast<double>(state.start_features_count);
+//        return win_distance + scale * start_bias * start_distance;
+        return start_distance;
     }
 };
 
 // the less percentage of spies or innocents left - the better
-
-
-
-// prefer when both spies and innocents left are low or
-// when only one is low?
 
 //endregion
 
@@ -265,8 +274,6 @@ public:
 private:
     vector<pair<State*, Command>> possible_moves;
 };
-
-
 
 int main()
 {
@@ -387,7 +394,7 @@ int main()
     CameFromMap came_from;
     const State* winning_state = nullptr;
 
-    aStar(came_from, new State(std::move(features), 9, 6), winning_state);
+    aStar(came_from, new State(std::move(features), 9, 6, features.size()), winning_state);
 
     timer.start();
     constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
@@ -430,7 +437,9 @@ void aStar(CameFromMap& came_from, const State* start_state, const State*& winni
     came_from.insert(make_pair(start_state,
                                make_pair(nullptr, Command{ -1, false })));
 
-    queue<const State*> states({ start_state });
+    priority_queue<const State*, std::vector<const State*>, HeuristicPtrComparator> states;
+//    queue<const State*> states;
+    states.push(start_state);
 
     PossibleMovesCalculator movesCalculator;
 
@@ -438,7 +447,7 @@ void aStar(CameFromMap& came_from, const State* start_state, const State*& winni
     int states_poppings = 0;
 
     while (!states.empty()) {
-        auto* curr_state = states.front();
+        auto* curr_state = states.top();
         states.pop();
         states_poppings++;
 
