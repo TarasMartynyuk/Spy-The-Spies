@@ -104,8 +104,11 @@ struct Command {
 class State {
 
 public:
-    explicit State(vector<Feature>&& features)
-        : features_(std::move(features)) {}
+    const int spies_left;
+    const int innocents_left;
+
+    State(vector<Feature>&& features, int innocents_left, int spies_left)
+        : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left) {}
 
     bool onlySpiesLeft() {
         return all_of(features().begin(), features().end(),
@@ -129,18 +132,9 @@ public:
 
         for (auto& feature : features_) {
             if(feature.id != indicated_feature.id) {
-                unordered_set<int> new_spies;
-                new_spies.reserve(feature.spies().size());
-
-                for(int spy : feature.spies()) {
-                    if(indicated_feature.spies().count(spy) == 0) {
-                        new_spies.emplace(spy);
-                    }
-                }
-                unordered_set<int> innocents_copy(feature.innocents());
-
                 new_features.emplace_back(feature.id,
-                                          move(new_spies), move(innocents_copy));
+                                          getSpiesIgnoringIndicated(feature, indicated_feature),
+                                          unordered_set<int>(feature.innocents()));
             }
         }
         assert(all_of(new_features.begin(), new_features.end(),
@@ -148,7 +142,8 @@ public:
                          return areDisjoint(f.spies(), indicated_feature.spies()) &&
                                 areDisjoint(f.innocents(), indicated_feature.spies());
             }));
-        return new State(move(new_features));
+
+        return new State(move(new_features), 0, 0);
     }
     State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
         vector<Feature> new_features;
@@ -156,18 +151,9 @@ public:
 
         for (auto& feature : features_) {
             if (feature.id != indicated_feature.id) {
-                unordered_set<int> new_innocents;
-                new_innocents.reserve(feature.innocents().size());
-
-                for (int innocent : feature.innocents()) {
-                    if(indicated_feature.innocents().count(innocent) == 0) {
-                        new_innocents.emplace(innocent);
-                    }
-                }
-                unordered_set<int> spies_copy(feature.spies());
-
                 new_features.emplace_back(feature.id,
-                                          move(spies_copy), move(new_innocents));
+                                          unordered_set<int>(feature.spies()),
+                                          getInnocentsIgnoringIndicated(feature, indicated_feature));
             }
         }
         assert(all_of(new_features.begin(), new_features.end(),
@@ -175,18 +161,65 @@ public:
                           return areDisjoint(f.spies(), indicated_feature.innocents()) &&
                                  areDisjoint(f.innocents(), indicated_feature.innocents());
                       }));
-        return new State(move(new_features));
+        return new State(move(new_features), 0, 0);
     }
 
 private:
     vector<Feature> features_;
-};
-struct HeuristicComparator {
-    bool operator()(const State& left, const State& right) {
 
+    unordered_set<int> getInnocentsIgnoringIndicated(
+        const Feature& feature_to_modify,
+        const Feature& indicated_feature) const
+    {
+        unordered_set<int> new_innocents;
+        new_innocents.reserve(feature_to_modify.innocents().size());
+
+        for (int innocent : feature_to_modify.innocents()) {
+            if (indicated_feature.innocents().count(innocent) == 0) {
+                new_innocents.emplace(innocent);
+            }
+        }
+        return new_innocents;
+    }
+
+    unordered_set<int> getSpiesIgnoringIndicated(
+                                                const Feature& feature_to_modify,
+                                                const Feature& indicated_feature)const {
+        unordered_set<int> new_spies;
+        new_spies.reserve(feature_to_modify.spies().size());
+
+        for (int spy : feature_to_modify.spies()) {
+            if (indicated_feature.spies().count(spy) == 0) {
+                new_spies.emplace(spy);
+            }
+        }
+        return new_spies;
     }
 };
 
+// heuristic distance - the lower, the closer we are to goal, hence the better
+
+struct HeuristicComparator {
+    const int max_spies = 6;
+    const int max_innocents = 9;
+
+    // sorts descending
+    bool operator()(const State& left, const State& right) {
+        return heuristic(left) > heuristic(right);
+    }
+
+    int heuristic(const State& state) {
+        return 3 * state.spies_left / max_spies +
+               2 * state.innocents_left / max_innocents;
+    }
+};
+
+// the less percentage of spies or innocents left - the better
+
+
+
+// prefer when both spies and innocents left are low or
+// when only one is low?
 
 //endregion
 
@@ -213,8 +246,6 @@ public:
 private:
     vector<pair<State*, Command>> possible_moves;
 };
-
-
 
 int main()
 {
@@ -266,10 +297,6 @@ int main()
     cin >> enemy1 >> enemy2 >> enemy3 >> enemy4 >> enemy5 >> enemy6; cin.ignore();
     unordered_set<string> spies ({ enemy1, enemy2, enemy3, enemy4, enemy5, enemy6 });    // temp for input
 
-    ostream_iterator<string> os_it(cerr, " ");
-    copy(spies, os_it);
-    cerr << "\n";
-
     // map { id : suspect_name }
     vector<string> suspect_names(kSuspectCount, "#");
 
@@ -284,15 +311,15 @@ int main()
     int curr_id = 0;
 
     for (int suspect_id = 0; suspect_id < kSuspectCount; suspect_id++) {
-        string suspect_name; cin >> suspect_name; cin.ignore(); cerr << suspect_name << " ";
+        string suspect_name; cin >> suspect_name; cin.ignore();
         suspect_names.at(suspect_id) = suspect_name;
 
         bool is_spy = spies.count(suspect_name) != 0;
 
-        int feat_count; cin >> feat_count; cin.ignore(); cerr << feat_count << " ";
+        int feat_count; cin >> feat_count; cin.ignore();
 
         for (int i = 0; i < feat_count; ++i) {
-            string feature_name; cin >> feature_name; cin.ignore(); cerr << feature_name << " ";
+            string feature_name; cin >> feature_name; cin.ignore();
 
             auto id_it = nameIdMap.find(feature_name);
 
@@ -333,7 +360,7 @@ int main()
     //endregion
     timer.stopAndPrintResult("parsed input");
     timer.start();
-    auto* start_state = new State(std::move(features));
+    auto* start_state = new State(std::move(features), 9, 6);
 
     // TODO: use doubly-linked tree of Moves instead?
     // and delete states on the fly, after we've added adjacent
@@ -342,15 +369,19 @@ int main()
     came_from.insert(make_pair(start_state,
                                make_pair(nullptr, Command{ -1, false })));
 
-    queue<State*> states;
-    states.push(start_state);
+    queue<State*> states ({ start_state});
+//    states.push();
 
     PossibleMovesCalculator movesCalculator;
     State* winning_state;
 
+    int states_additions = 1;
+    int states_poppings = 0;
+
     while (! states.empty())  {
         auto* curr_state = states.front();
         states.pop();
+        states_poppings++;
 
         if(curr_state->onlySpiesLeft() || curr_state->onlyInnocentsLeft()) {
             winning_state = curr_state;
@@ -362,17 +393,19 @@ int main()
             came_from.insert(make_pair(move.first,
                                        make_pair(curr_state, move.second)));
             states.push(move.first);
+            states_additions++;
         }
     }
 
-    timer.stopAndPrintResult("algorithm");
+    timer.stopAndPrintResult("\nalgorithm");
+    cerr << "states additions: " << states_additions << endl;
+    cerr << "states poppings: " << states_poppings << endl;
     timer.start();
 
     constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
     timer.stopAndPrintResult("answer");
     //TODO: delete states - iter over came_from;
 }
-
 
 void constructMovePathAndPrintAnswer(
     State* winning_state,
