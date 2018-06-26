@@ -11,13 +11,16 @@
 #include <regex>
 #include <cassert>
 #include <queue>
+#include <chrono>
 using namespace std;
+using namespace std::chrono;
+
+//region defs
 
 template <class TInputContainer, class OIter>
 OIter copy(TInputContainer container, OIter out_it) {
     return copy(container.begin(), container.end(), out_it);
 };
-
 template <class TIter1, class TIter2>
 bool areDisjoint(TIter1 container, TIter2 other_container) {
     vector<typename TIter1::value_type> intersection;
@@ -27,9 +30,31 @@ bool areDisjoint(TIter1 container, TIter2 other_container) {
 
     return intersection.empty();
 };
+class Timer {
+public:
+    void start() {
+        time_started = high_resolution_clock::now();
+    }
+    void stopAndPrintResult(const string& description) {
+        auto finish = high_resolution_clock::now();
+        auto seconds = duration_cast<microseconds>(finish - time_started);
+        cerr << description << ": " << (seconds.count() / 1000.0) << endl;
+    }
 
+    high_resolution_clock::time_point time_started;
+};
 
-struct Feature  {
+class State;
+class Command;
+
+void constructMovePathAndPrintAnswer(State* winning_state,
+                                     const unordered_map<State*, pair<State*, Command>>& came_from,
+                                     const vector<string>& feature_names);
+//endregion
+
+//region struct
+
+class Feature  {
 public:
     const int id;
     Feature(const int id) : id(id) {}
@@ -66,42 +91,17 @@ private:
     unordered_set<int> innocents_;
 
     bool spiesAndInnocentsAreDisjoint() {
-//        vector<int> intercetion;
-//        set_intersection(spies_.begin(), spies_.end(),
-//                         innocents_.begin(), innocents_.end() ,
-//                         intercetion.begin());
-//        return intercetion.empty();
         return areDisjoint(spies(), innocents());
     }
 };
-
 struct Command {
     // what feature to mark
     int feature_id;
     // if false - indicates innocent
     bool indicates_spies;
 };
-// choosing next states:
-// can't mark feature as spy  if any innocent has it
-// can't  mark feature as innocent if any spy has it
-
-// mark as spy : for all spies with feature - delete entries for spy in all other features
-
-
-
-// feature having hashmaps for spies and innocents:
-// anySpyHasFeature - hash-const
-// anyInnocentHasFeature - hash-const
-
-
-// select markable features: F
-
-// mark as spy:
-//  get all spies with feature : hash-const
-// delete all spies from other features: 5 * hash-const
-
 // mark as innocent : 9 * hash-const ()
-struct State {
+class State {
 
 public:
     explicit State(vector<Feature>&& features)
@@ -143,11 +143,11 @@ public:
                                           move(new_spies), move(innocents_copy));
             }
         }
-//        assert(all_of(new_features.begin(), new_features.end(),
-//                     [&indicated_feature](Feature f) {
-//                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
-//                                areDisjoint(f.innocents(), indicated_feature.spies());
-//            }));
+        assert(all_of(new_features.begin(), new_features.end(),
+                     [&indicated_feature](Feature f) {
+                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
+                                areDisjoint(f.innocents(), indicated_feature.spies());
+            }));
         return new State(move(new_features));
     }
     State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
@@ -170,17 +170,25 @@ public:
                                           move(spies_copy), move(new_innocents));
             }
         }
-//        assert(all_of(new_features.begin(), new_features.end(),
-//                      [&indicated_feature](Feature f) {
-//                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
-//                                 areDisjoint(f.innocents(), indicated_feature.innocents());
-//                      }));
+        assert(all_of(new_features.begin(), new_features.end(),
+                      [&indicated_feature](Feature f) {
+                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
+                                 areDisjoint(f.innocents(), indicated_feature.innocents());
+                      }));
         return new State(move(new_features));
     }
 
 private:
     vector<Feature> features_;
 };
+struct HeuristicComparator {
+    bool operator()(const State& left, const State& right) {
+
+    }
+};
+
+
+//endregion
 
 class PossibleMovesCalculator {
 public:
@@ -206,32 +214,7 @@ private:
     vector<pair<State*, Command>> possible_moves;
 };
 
-void constructMovePathAndPrintAnswer(State* winning_state,
-                                     const unordered_map<State*, pair<State*, Command>>& came_from,
-                                     const vector<string>& feature_names) {
-    // get moves sequence
-    stack<Command> commands;
-    State* curr_state = winning_state;
-    while (true) {
-        auto move = came_from.at(curr_state);
-        if (move.first == nullptr) {
-            break;
-        }
-        commands.emplace(move.second);
-        curr_state = move.first;
-    }
 
-    cerr << "\n";
-    while (!commands.empty()) {
-        auto move = commands.top();
-        commands.pop();
-
-        if (!move.indicates_spies) {
-            cout << "NOT ";
-        }
-        cout << feature_names.at(move.feature_id) << endl;
-    }
-}
 
 int main()
 {
@@ -273,7 +256,8 @@ int main()
 //           "Vena 1 arabic \n"
 //           "Eros 1 arabic\n";
      //endregion
-
+    Timer timer;
+    timer.start();
     //region input
     assert(false);
     const int kSuspectCount = 15;
@@ -282,10 +266,12 @@ int main()
     cin >> enemy1 >> enemy2 >> enemy3 >> enemy4 >> enemy5 >> enemy6; cin.ignore();
     unordered_set<string> spies ({ enemy1, enemy2, enemy3, enemy4, enemy5, enemy6 });    // temp for input
 
+    ostream_iterator<string> os_it(cerr, " ");
+    copy(spies, os_it);
+    cerr << "\n";
+
     // map { id : suspect_name }
     vector<string> suspect_names(kSuspectCount, "#");
-    // map { id : bool }, true if spy
-    vector<bool> are_spies(kSuspectCount, false);
 
     // map {id : feature name}
     vector<string> feature_names;
@@ -298,16 +284,15 @@ int main()
     int curr_id = 0;
 
     for (int suspect_id = 0; suspect_id < kSuspectCount; suspect_id++) {
-        string suspect_name; cin >> suspect_name; cin.ignore(); //cerr << suspect_name << " ";
+        string suspect_name; cin >> suspect_name; cin.ignore(); cerr << suspect_name << " ";
         suspect_names.at(suspect_id) = suspect_name;
 
         bool is_spy = spies.count(suspect_name) != 0;
-        are_spies[suspect_id] = is_spy;
 
-        int feat_count; cin >> feat_count; cin.ignore(); //cerr << feat_count << " ";
+        int feat_count; cin >> feat_count; cin.ignore(); cerr << feat_count << " ";
 
         for (int i = 0; i < feat_count; ++i) {
-            string feature_name; cin >> feature_name; cin.ignore(); //cerr << feature_name << " ";
+            string feature_name; cin >> feature_name; cin.ignore(); cerr << feature_name << " ";
 
             auto id_it = nameIdMap.find(feature_name);
 
@@ -316,13 +301,13 @@ int main()
                     feature_name, curr_id)).first;
                 feature_names.push_back(feature_name);
 
-//                assert(feature_names.size() == curr_id + 1);
-//                assert(feature_names.at(curr_id) == feature_name);
+                assert(feature_names.size() == curr_id + 1);
+                assert(feature_names.at(curr_id) == feature_name);
 
                 features.emplace_back(curr_id++);
             }
 
-//            assert(id_it->second < curr_id);
+            assert(id_it->second < curr_id);
             if(is_spy) {
                 features.at(id_it->second).addSpy(suspect_id);
             } else {
@@ -332,21 +317,22 @@ int main()
         cerr << "\n";
     }
 
-//    for (int i = 0; i < features.size(); ++i)
-//        { assert(features.at(i).id == i); }
-
+    for (int i = 0; i < features.size(); ++i)
+        { assert(features.at(i).id == i); }
 //    cerr << "Suspects: \n";
 //    for (int i = 0; i < suspect_names.size(); ++i) {
 //        cerr << "\t" << suspect_names.at(i);
 //        cerr << (are_spies.at(i) ?
 //            " : spy,\n" : " : innocent,\n");
 //    }
-
-//    cerr << "features:\n" ;//<< curr_id + 1;
+//
+//    cerr << "features:\n" ;
 //    for (auto& feature : features) {
 //        cerr <<  feature_names.at(feature.id) << " : " << feature.to_string() << "\n";
-//    }//endregion
-
+//    }
+    //endregion
+    timer.stopAndPrintResult("parsed input");
+    timer.start();
     auto* start_state = new State(std::move(features));
 
     // TODO: use doubly-linked tree of Moves instead?
@@ -362,7 +348,7 @@ int main()
     PossibleMovesCalculator movesCalculator;
     State* winning_state;
 
-    while (! states.empty()) {
+    while (! states.empty())  {
         auto* curr_state = states.front();
         states.pop();
 
@@ -379,7 +365,39 @@ int main()
         }
     }
 
-    constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
+    timer.stopAndPrintResult("algorithm");
+    timer.start();
 
+    constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
+    timer.stopAndPrintResult("answer");
     //TODO: delete states - iter over came_from;
+}
+
+
+void constructMovePathAndPrintAnswer(
+    State* winning_state,
+    const unordered_map<State*, pair<State*, Command>>& came_from,
+    const vector<string>& feature_names) {
+    // get moves sequence
+    stack<Command> commands;
+    State* curr_state = winning_state;
+    while (true) {
+        auto move = came_from.at(curr_state);
+        if (move.first == nullptr) {
+            break;
+        }
+        commands.emplace(move.second);
+        curr_state = move.first;
+    }
+
+    cerr << "\n";
+    while (!commands.empty()) {
+        auto move = commands.top();
+        commands.pop();
+
+        if (!move.indicates_spies) {
+            cout << "NOT ";
+        }
+        cout << feature_names.at(move.feature_id) << endl;
+    }
 }
