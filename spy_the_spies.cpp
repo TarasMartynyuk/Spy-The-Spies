@@ -111,17 +111,17 @@ public:
         : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left) {}
 
     bool onlySpiesLeft() {
-        return all_of(features().begin(), features().end(),
-                     [](const Feature& feature) {
-                         return feature.spies().size() == 0;
-        });
+        bool res = innocents_left == 0;
+        assert(res ? spies_left != 0 ? true);
+        assert(res ? featuresHaveNoInnocents() : true);
+        return res;
     }
 
     bool onlyInnocentsLeft() {
-        return all_of(features().begin(), features().end(),
-                      [](const Feature& feature) {
-                          return feature.innocents().size() == 0;
-                      });
+        bool res = spies_left == 0;
+        assert(res ? innocents_left != 0 ? true);
+        assert(res ? featuresHaveNoSpies() : true);
+        return res;
     }
 
     const vector<Feature>& features() const { return features_; }
@@ -142,8 +142,9 @@ public:
                          return areDisjoint(f.spies(), indicated_feature.spies()) &&
                                 areDisjoint(f.innocents(), indicated_feature.spies());
             }));
+        int new_spies_count = spies_left - indicated_feature.spies().size();
 
-        return new State(move(new_features), 0, 0);
+        return new State(move(new_features), innocents_left, new_spies_count);
     }
     State* indicateInnocentsHaveFeature(const Feature& indicated_feature) const {
         vector<Feature> new_features;
@@ -161,7 +162,8 @@ public:
                           return areDisjoint(f.spies(), indicated_feature.innocents()) &&
                                  areDisjoint(f.innocents(), indicated_feature.innocents());
                       }));
-        return new State(move(new_features), 0, 0);
+        int new_innocents_count = innocents_left - indicated_feature.innocents().size();
+        return new State(move(new_features), new_innocents_count, spies_left);
     }
 
 private:
@@ -194,6 +196,20 @@ private:
             }
         }
         return new_spies;
+    }
+
+    bool featuresHaveNoSpies() {
+        return all_of(features().begin(), features().end(),
+                      [](const Feature& feature) {
+                          return feature.spies().size() == 0;
+                      });
+    }
+
+    bool featuresHaveNoInnocents() {
+        return all_of(features().begin(), features().end(),
+               [](const Feature& feature) {
+                   return feature.innocents().size() == 0;
+               });
     }
 };
 
