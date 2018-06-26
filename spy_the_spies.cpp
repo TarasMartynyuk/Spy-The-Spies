@@ -46,10 +46,13 @@ public:
 
 class State;
 class Command;
+using CameFromMap = unordered_map<State*, pair<State*, Command>>;
 
 void constructMovePathAndPrintAnswer(State* winning_state,
-                                     const unordered_map<State*, pair<State*, Command>>& came_from,
+                                     const CameFromMap& came_from,
                                      const vector<string>& feature_names);
+
+void aStar(CameFromMap& came_from, State* start_state, State*& winning_state);
 //endregion
 
 //region struct
@@ -224,9 +227,9 @@ struct HeuristicComparator {
         return heuristic(left) > heuristic(right);
     }
 
-    int heuristic(const State& state) {
-        return 3 * state.spies_left / max_spies +
-               2 * state.innocents_left / max_innocents;
+    double heuristic(const State& state) {
+        return 3 * state.spies_left / static_cast<double>(max_spies) +
+               2 * state.innocents_left / static_cast<double>(max_innocents);
     }
 };
 
@@ -262,6 +265,8 @@ public:
 private:
     vector<pair<State*, Command>> possible_moves;
 };
+
+
 
 int main()
 {
@@ -375,49 +380,16 @@ int main()
 //    }
     //endregion
     timer.stopAndPrintResult("parsed input");
-    timer.start();
-    auto* start_state = new State(std::move(features), 9, 6);
 
     // TODO: use doubly-linked tree of Moves instead?
     // and delete states on the fly, after we've added adjacent
     // { state : { , prev state } }
-    unordered_map<State*, pair<State *, Command>> came_from;
-    came_from.insert(make_pair(start_state,
-                               make_pair(nullptr, Command{ -1, false })));
+    CameFromMap came_from;
+    State* winning_state = nullptr;
 
-    queue<State*> states ({ start_state});
-//    states.push();
+    aStar(came_from, new State(std::move(features), 9, 6), winning_state);
 
-    PossibleMovesCalculator movesCalculator;
-    State* winning_state;
-
-    int states_additions = 1;
-    int states_poppings = 0;
-
-    while (! states.empty())  {
-        auto* curr_state = states.front();
-        states.pop();
-        states_poppings++;
-
-        if(curr_state->onlySpiesLeft() || curr_state->onlyInnocentsLeft()) {
-            winning_state = curr_state;
-            break;
-        }
-
-        movesCalculator.calculatePossibleMoves(*curr_state);
-        for (auto& move : movesCalculator.possibleMoves()) {
-            came_from.insert(make_pair(move.first,
-                                       make_pair(curr_state, move.second)));
-            states.push(move.first);
-            states_additions++;
-        }
-    }
-
-    timer.stopAndPrintResult("\nalgorithm");
-    cerr << "states additions: " << states_additions << endl;
-    cerr << "states poppings: " << states_poppings << endl;
     timer.start();
-
     constructMovePathAndPrintAnswer(winning_state, came_from, feature_names);
     timer.stopAndPrintResult("answer");
     //TODO: delete states - iter over came_from;
@@ -425,7 +397,7 @@ int main()
 
 void constructMovePathAndPrintAnswer(
     State* winning_state,
-    const unordered_map<State*, pair<State*, Command>>& came_from,
+    const CameFromMap& came_from,
     const vector<string>& feature_names) {
     // get moves sequence
     stack<Command> commands;
@@ -450,3 +422,42 @@ void constructMovePathAndPrintAnswer(
         cout << feature_names.at(move.feature_id) << endl;
     }
 }
+
+void aStar(CameFromMap& came_from, State* start_state, State*& winning_state) {
+    Timer timer;
+    timer.start();
+
+    came_from.insert(make_pair(start_state,
+                               make_pair(nullptr, Command{ -1, false })));
+
+    queue<State*> states({ start_state });
+
+    PossibleMovesCalculator movesCalculator;
+
+    int states_additions = 1;
+    int states_poppings = 0;
+
+    while (!states.empty()) {
+        auto* curr_state = states.front();
+        states.pop();
+        states_poppings++;
+
+        if (curr_state->onlySpiesLeft() || curr_state->onlyInnocentsLeft()) {
+            winning_state = curr_state;
+            break;
+        }
+
+        movesCalculator.calculatePossibleMoves(*curr_state);
+        for (auto& move : movesCalculator.possibleMoves()) {
+            came_from.insert(make_pair(move.first,
+                                       make_pair(curr_state, move.second)));
+            states.push(move.first);
+            states_additions++;
+        }
+    }
+
+    timer.stopAndPrintResult("\nalgorithm");
+    cerr << "states additions: " << states_additions << endl;
+    cerr << "states poppings: " << states_poppings << endl;
+}
+
