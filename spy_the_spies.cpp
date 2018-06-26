@@ -46,13 +46,13 @@ public:
 
 class State;
 class Command;
-using CameFromMap = unordered_map<State*, pair<State*, Command>>;
+using CameFromMap = unordered_map<const State*, pair<const State*, Command>>;
 
-void constructMovePathAndPrintAnswer(State* winning_state,
+void constructMovePathAndPrintAnswer(const State* winning_state,
                                      const CameFromMap& came_from,
                                      const vector<string>& feature_names);
 
-void aStar(CameFromMap& came_from, State* start_state, State*& winning_state);
+void aStar(CameFromMap& came_from, const State* start_state, const State*& winning_state);
 //endregion
 
 //region struct
@@ -113,14 +113,14 @@ public:
     State(vector<Feature>&& features, int innocents_left, int spies_left)
         : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left) {}
 
-    bool onlySpiesLeft() {
+    bool onlySpiesLeft()const {
         bool res = innocents_left == 0;
         assert(res ? spies_left != 0 ? true);
         assert(res ? featuresHaveNoInnocents() : true);
         return res;
     }
 
-    bool onlyInnocentsLeft() {
+    bool onlyInnocentsLeft()const {
         bool res = spies_left == 0;
         assert(res ? innocents_left != 0 ? true);
         assert(res ? featuresHaveNoSpies() : true);
@@ -385,7 +385,7 @@ int main()
     // and delete states on the fly, after we've added adjacent
     // { state : { , prev state } }
     CameFromMap came_from;
-    State* winning_state = nullptr;
+    const State* winning_state = nullptr;
 
     aStar(came_from, new State(std::move(features), 9, 6), winning_state);
 
@@ -396,12 +396,12 @@ int main()
 }
 
 void constructMovePathAndPrintAnswer(
-    State* winning_state,
+    const State* winning_state,
     const CameFromMap& came_from,
     const vector<string>& feature_names) {
     // get moves sequence
     stack<Command> commands;
-    State* curr_state = winning_state;
+    const State* curr_state = winning_state;
     while (true) {
         auto move = came_from.at(curr_state);
         if (move.first == nullptr) {
@@ -423,14 +423,14 @@ void constructMovePathAndPrintAnswer(
     }
 }
 
-void aStar(CameFromMap& came_from, State* start_state, State*& winning_state) {
+void aStar(CameFromMap& came_from, const State* start_state, const State*& winning_state) {
     Timer timer;
     timer.start();
 
     came_from.insert(make_pair(start_state,
                                make_pair(nullptr, Command{ -1, false })));
 
-    queue<State*> states({ start_state });
+    queue<const State*> states({ start_state });
 
     PossibleMovesCalculator movesCalculator;
 
