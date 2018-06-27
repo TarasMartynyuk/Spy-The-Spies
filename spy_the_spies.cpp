@@ -1,4 +1,5 @@
 #define NDEBUG
+#include <gperftools/profiler.h>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -46,6 +47,8 @@ public:
 
 class State;
 class Command;
+struct HeuristicPtrComparator;
+
 using CameFromMap = unordered_map<const State*, pair<const State*, Command>>;
 
 void constructMovePathAndPrintAnswer(const State* winning_state,
@@ -66,8 +69,8 @@ public:
         : id(id), spies_(spies), innocents_(innocents) {}
 
 
-    const unordered_set<int> spies()const { return spies_; }
-    const unordered_set<int> innocents()const { return innocents_; }
+    const unordered_set<int> spies() const { return spies_; }
+    const unordered_set<int> innocents() const { return innocents_; }
 
     void addSpy(int spy) {
         spies_.emplace(spy);
@@ -78,7 +81,7 @@ public:
 //        assert(spiesAndInnocentsAreDisjoint());
     }
 
-    string to_string() {
+    string to_string() {    
         stringstream ss;
         ss << "{ id : " << id << ",\n" << "\tspies: ";
         ostream_iterator<int> ostream_it(ss, ", ");
@@ -103,12 +106,27 @@ struct Command {
     // if false - indicates innocent
     bool indicates_spies;
 };
-// mark as innocent : 9 * hash-const ()
+
+struct HeuristicPtrComparator {
+    const int max_spies = 6;
+    const int max_innocents = 9;
+
+    // sorts descending
+    bool operator()(const State* left, const State* right) {
+        return heuristic(*left) >= heuristic(*right);
+    }
+    // heuristic distance - the lower, the closer we are to goal, hence the better
+    double heuristic(const State& state);
+};
+
 class State {
 
 public:
     const int spies_left;
     const int innocents_left;
+#ifndef NDEBUG
+    double heuristic;
+#endif
 
     const int start_features_count;
 
@@ -117,18 +135,22 @@ public:
           int spies_left, const
           int start_features_count)
         : features_(std::move(features)), innocents_left(innocents_left), spies_left(spies_left),
-        start_features_count(start_features_count) {}
+        start_features_count(start_features_count) {
+#ifndef NDEBUG
+        heuristic = HeuristicPtrComparator().heuristic(*this);
+#endif
+    }
 
     bool onlySpiesLeft()const {
         bool res = innocents_left == 0;
-        assert(res ? spies_left != 0 ? true);
+        assert(res ? spies_left != 0 : true);
         assert(res ? featuresHaveNoInnocents() : true);
         return res;
     }
 
     bool onlyInnocentsLeft()const {
         bool res = spies_left == 0;
-        assert(res ? innocents_left != 0 ? true);
+        assert(res ? innocents_left != 0 : true);
         assert(res ? featuresHaveNoSpies() : true);
         return res;
     }
@@ -207,14 +229,14 @@ private:
         return new_spies;
     }
 
-    bool featuresHaveNoSpies() {
+    bool featuresHaveNoSpies() const {
         return all_of(features().begin(), features().end(),
                       [](const Feature& feature) {
-                          return feature.spies().size() == 0;
+                          return feature.spies().empty();
                       });
     }
 
-    bool featuresHaveNoInnocents() {
+    bool featuresHaveNoInnocents()const {
         return all_of(features().begin(), features().end(),
                [](const Feature& feature) {
                    return feature.innocents().size() == 0;
@@ -222,32 +244,18 @@ private:
     }
 };
 
-// heuristic distance - the lower, the closer we are to goal, hence the better
+double HeuristicPtrComparator::heuristic(const State& state) {
+    // range [0,  18 + 18] = [0, 36]
+    double win_distance = 3 * state.spies_left +
+                          2 * state.innocents_left;
+    // range [0, #features]
+    double start_distance = state.start_features_count - state.features().size();
 
-struct HeuristicPtrComparator {
-    const int max_spies = 6;
-    const int max_innocents = 9;
-
-    // sorts descending
-    bool operator()(const State* left, const State* right) {
-        return heuristic(*left) > heuristic(*right);
-    }
-
-    double heuristic(const State& state) {
-        // range [0,  18 + 18] = [0, 36]
-        double win_distance = 3 * state.spies_left / static_cast<double>(max_spies) +
-                              2 * state.innocents_left / static_cast<double>(max_innocents);
-        // range [0, #features]
-        double start_distance = state.features().size() - state.start_features_count;
-
-        const double start_bias = 100000;
-        double scale = 36 / static_cast<double>(state.start_features_count);
-//        return win_distance + scale * start_bias * start_distance;
-        return start_distance;
-    }
-};
-
-// the less percentage of spies or innocents left - the better
+    const double start_bias = 1;
+    double scale = 36 / static_cast<double>(state.start_features_count);
+    return win_distance + scale * start_bias * start_distance;
+//    return start_distance;
+}
 
 //endregion
 
@@ -277,6 +285,7 @@ private:
 
 int main()
 {
+    //    assert(false);
     //region mock
 //
 //    stringstream cin;
@@ -314,11 +323,28 @@ int main()
 //           "Dallas 1 arabic \n"
 //           "Vena 1 arabic \n"
 //           "Eros 1 arabic\n";
-     //endregion
+
+    stringstream cin;
+    cin << "Tabitha Mohammad Ronaldo Jeanne Vena Eros\n"
+           "Tabitha 2 tall thin\n"
+           "Rolf 2 blue-eyed glasses\n"
+           "Mohammad 2 thin green-eyed\n"
+           "Jacob 2 blue-eyed blond\n"
+           "Derick 2 glasses red-haired\n"
+           "Meta 2 chubby freckled\n"
+           "Ronaldo 2 tall thin\n"
+           "Melville 2 blue-eyed chubby\n"
+           "Hermon 2 tattooed blond\n"
+           "Tempest 2 chubby freckled\n"
+           "Jeanne 2 thin tall\n"
+           "Kourtney 2 blond tattooed\n"
+           "Dallas 2 glasses freckled\n"
+           "Vena 2 green-eyed thin\n"
+           "Eros 2 thin brown-haired\n";
+    //endregion
     Timer timer;
     timer.start();
     //region input
-    assert(false);
     const int kSuspectCount = 15;
 
     string enemy1, enemy2, enemy3, enemy4, enemy5, enemy6;
@@ -431,6 +457,7 @@ void constructMovePathAndPrintAnswer(
 }
 
 void aStar(CameFromMap& came_from, const State* start_state, const State*& winning_state) {
+    ProfilerStart("./OUTPUT_HERE.prof");
     Timer timer;
     timer.start();
 
@@ -438,7 +465,7 @@ void aStar(CameFromMap& came_from, const State* start_state, const State*& winni
                                make_pair(nullptr, Command{ -1, false })));
 
     priority_queue<const State*, std::vector<const State*>, HeuristicPtrComparator> states;
-//    queue<const State*> states;
+    // queue<const State*> states;
     states.push(start_state);
 
     PossibleMovesCalculator movesCalculator;
@@ -468,5 +495,8 @@ void aStar(CameFromMap& came_from, const State* start_state, const State*& winni
     timer.stopAndPrintResult("\nalgorithm");
     cerr << "states additions: " << states_additions << endl;
     cerr << "states poppings: " << states_poppings << endl;
+
+    ProfilerFlush();
+    ProfilerStop();
 }
 
