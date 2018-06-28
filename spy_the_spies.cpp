@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 #include <iostream>
 #include <string>
 #include <utility>
@@ -325,23 +325,23 @@ int main()
     // assert(false);
     //region mock
 //
-    stringstream cin;
-    cin << "Fred Mark Kim Anita Dwayne Nick\n"
-           "Daniel 1 chinese\n"
-           "Clem 1 german\n"
-           "Dwayne 1 french\n"
-           "Anita 1 french\n"
-           "Spruce 1 german\n"
-           "Fred 1 french\n"
-           "Adan 1 chinese\n"
-           "Sven 1 irish\n"
-           "Nick 1 french\n"
-           "Tim 1 irish\n"
-           "Harley 1 english\n"
-           "Mary 1 russian\n"
-           "Kim 1 french\n"
-           "Rashad 1 chinese\n"
-           "Mark 1 french\n";
+    // stringstream cin;
+    // cin << "Fred Mark Kim Anita Dwayne Nick\n"
+    //       "Daniel 1 chinese\n"
+    //       "Clem 1 german\n"
+    //       "Dwayne 1 french\n"
+    //       "Anita 1 french\n"
+    //       "Spruce 1 german\n"
+    //       "Fred 1 french\n"
+    //       "Adan 1 chinese\n"
+    //       "Sven 1 irish\n"
+    //       "Nick 1 french\n"
+    //       "Tim 1 irish\n"
+    //       "Harley 1 english\n"
+    //       "Mary 1 russian\n"
+    //       "Kim 1 french\n"
+    //       "Rashad 1 chinese\n"
+    //       "Mark 1 french\n";
 
     //    stringstream cin;
     //    cin << "Tabitha  Rolf Derick Ronaldo Tempest Jeanne\n"
