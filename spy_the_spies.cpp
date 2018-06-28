@@ -1,5 +1,4 @@
-#define NDEBUG
-#include <gperftools/profiler.h>
+//#define NDEBUG
 #include <iostream>
 #include <string>
 #include <utility>
@@ -56,49 +55,90 @@ void constructMovePathAndPrintAnswer(const State* winning_state,
                                      const vector<string>& feature_names);
 
 void aStar(CameFromMap& came_from, const State* start_state, const State*& winning_state);
+
+const int kSuspectCount = 15;
+const int kInnocentsCount = 9;
+const int kSpiesCount = 6;
+
 //endregion
 
 //region struct
+// used as a unordered set for spies and innocents
+class SuspectSet {
+public:
+    static const int kSuspectsCount = kSuspectCount;
+
+    SuspectSet() : suspect_marks_(kSuspectsCount, false), marks_count(0) {}
+
+    SuspectSet(const SuspectSet& other) :
+        suspect_marks_(other.suspect_marks_),
+        marks_count(other.marks_count) {}
+
+    SuspectSet(SuspectSet&& other) :
+        suspect_marks_(move(other.suspect_marks_)),
+        marks_count(other.marks_count) {}
+
+    int size()const {
+        return marks_count;
+    }
+    bool empty()const {
+        return marks_count == 0;
+    }
+    bool contains(int suspect_id)const {
+        assert(suspect_id >= 0 && suspect_id < kSuspectsCount);
+        return suspect_marks_.at(suspect_id);
+    }
+    void addSuspect(int suspect_id) {
+        assert(suspect_id >= 0 && suspect_id < kSuspectsCount);
+        suspect_marks_.at(suspect_id) = true;
+        marks_count++;
+    }
+
+private:
+
+    int marks_count;
+    vector<bool> suspect_marks_;
+};
 
 class Feature  {
 public:
     const int id;
     Feature(const int id) : id(id) {}
 
-    Feature(const int id, unordered_set<int>&& spies, unordered_set<int>&& innocents)
-        : id(id), spies_(spies), innocents_(innocents) {}
+    Feature(const int id, SuspectSet&& spies, unordered_set<int>&& innocents)
+        : id(id), spies_(spies),
+        innocents_(innocents) {
+    }
 
+    const SuspectSet& spies()const { return  spies_; }
+    int spiesCount()const {
+        return spies_.size();
+    }
+    bool noSpies()const {
+        return spies_.empty();
+    }
+    bool hasSpy(int spy)const {
+        return spies_.contains(spy);
+    }
+    void addSpy(int spy) {
+        spies_.addSuspect(spy);
+        assert(spies_.size() <= kSpiesCount);
+    }
 
-    const unordered_set<int> spies() const { return spies_; }
     const unordered_set<int> innocents() const { return innocents_; }
 
-    void addSpy(int spy) {
-        spies_.emplace(spy);
-//        assert(spiesAndInnocentsAreDisjoint());
-    }
+
     void addInnocent(int innocent) {
         innocents_.emplace(innocent);
-//        assert(spiesAndInnocentsAreDisjoint());
     }
 
-    string to_string() {    
-        stringstream ss;
-        ss << "{ id : " << id << ",\n" << "\tspies: ";
-        ostream_iterator<int> ostream_it(ss, ", ");
-        copy(spies_, ostream_it);
-        ss << "\n\tinnocents: ";
-        copy(innocents_, ostream_it);
-        ss << "\n}";
-
-        return ss.str();
-    }
 private:
-    unordered_set<int> spies_;
+    SuspectSet spies_;
     unordered_set<int> innocents_;
 
-    bool spiesAndInnocentsAreDisjoint() {
-        return areDisjoint(spies(), innocents());
-    }
+//    bool spiesAndInnocentsAreDisjoint() {
+//        return areDisjoint(spies_, innocents());
+//    }
 };
 struct Command {
     // what feature to mark
@@ -120,14 +160,12 @@ struct HeuristicPtrComparator {
 };
 
 class State {
-
 public:
     const int spies_left;
     const int innocents_left;
 #ifndef NDEBUG
     double heuristic;
 #endif
-
     const int start_features_count;
 
     State(vector<Feature>&& features,
@@ -168,12 +206,12 @@ public:
                                           unordered_set<int>(feature.innocents()));
             }
         }
-        assert(all_of(new_features.begin(), new_features.end(),
-                     [&indicated_feature](Feature f) {
-                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
-                                areDisjoint(f.innocents(), indicated_feature.spies());
-            }));
-        int new_spies_count = spies_left - indicated_feature.spies().size();
+//        assert(all_of(new_features.begin(), new_features.end(),
+//                     [&indicated_feature](Feature f) {
+//                         return areDisjoint(f.spies(), indicated_feature.spies()) &&
+//                                areDisjoint(f.innocents(), indicated_feature.spies());
+//            }));
+        int new_spies_count = spies_left - indicated_feature.spiesCount();
 
         return new State(move(new_features), innocents_left, new_spies_count, start_features_count);
     }
@@ -184,15 +222,15 @@ public:
         for (auto& feature : features_) {
             if (feature.id != indicated_feature.id) {
                 new_features.emplace_back(feature.id,
-                                          unordered_set<int>(feature.spies()),
+                                          SuspectSet(feature.spies()),
                                           getInnocentsIgnoringIndicated(feature, indicated_feature));
             }
         }
-        assert(all_of(new_features.begin(), new_features.end(),
-                      [&indicated_feature](Feature f) {
-                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
-                                 areDisjoint(f.innocents(), indicated_feature.innocents());
-                      }));
+//        assert(all_of(new_features.begin(), new_features.end(),
+//                      [&indicated_feature](Feature f) {
+//                          return areDisjoint(f.spies(), indicated_feature.innocents()) &&
+//                                 areDisjoint(f.innocents(), indicated_feature.innocents());
+//                      }));
         int new_innocents_count = innocents_left - indicated_feature.innocents().size();
         return new State(move(new_features), new_innocents_count, spies_left, start_features_count);
     }
@@ -214,32 +252,31 @@ private:
         }
         return new_innocents;
     }
+    SuspectSet getSpiesIgnoringIndicated(
+                                        const Feature& feature_to_modify,
+                                        const Feature& indicated_feature)const {
+        SuspectSet new_spies;
 
-    unordered_set<int> getSpiesIgnoringIndicated(
-                                                const Feature& feature_to_modify,
-                                                const Feature& indicated_feature)const {
-        unordered_set<int> new_spies;
-        new_spies.reserve(feature_to_modify.spies().size());
-
-        for (int spy : feature_to_modify.spies()) {
-            if (indicated_feature.spies().count(spy) == 0) {
-                new_spies.emplace(spy);
+        for (int spy = 0; spy < kSuspectCount; ++spy) {
+            if (feature_to_modify.hasSpy(spy) &&
+                ! indicated_feature.hasSpy(spy)) {
+                new_spies.addSuspect(spy);
             }
         }
+        assert(new_spies.size() <= kSpiesCount);
         return new_spies;
     }
 
     bool featuresHaveNoSpies() const {
         return all_of(features().begin(), features().end(),
                       [](const Feature& feature) {
-                          return feature.spies().empty();
+                          return feature.noSpies();
                       });
     }
-
-    bool featuresHaveNoInnocents()const {
+    bool featuresHaveNoInnocents() const {
         return all_of(features().begin(), features().end(),
                [](const Feature& feature) {
-                   return feature.innocents().size() == 0;
+                   return feature.innocents().empty();
                });
     }
 };
@@ -251,7 +288,7 @@ double HeuristicPtrComparator::heuristic(const State& state) {
     // range [0, #features]
     double start_distance = state.start_features_count - state.features().size();
 
-    const double start_bias = 1;
+    const double start_bias = 2.7;
     double scale = 36 / static_cast<double>(state.start_features_count);
     return win_distance + scale * start_bias * start_distance;
 //    return start_distance;
@@ -285,26 +322,26 @@ private:
 
 int main()
 {
-    //    assert(false);
+    // assert(false);
     //region mock
 //
-//    stringstream cin;
-//    cin << "Fred Mark Kim Anita Dwayne Nick\n"
-//           "Daniel 1 chinese\n"
-//           "Clem 1 german\n"
-//           "Dwayne 1 french\n"
-//           "Anita 1 french\n"
-//           "Spruce 1 german\n"
-//           "Fred 1 french\n"
-//           "Adan 1 chinese\n"
-//           "Sven 1 irish\n"
-//           "Nick 1 french\n"
-//           "Tim 1 irish\n"
-//           "Harley 1 english\n"
-//           "Mary 1 russian\n"
-//           "Kim 1 french\n"
-//           "Rashad 1 chinese\n"
-//           "Mark 1 french\n";
+    stringstream cin;
+    cin << "Fred Mark Kim Anita Dwayne Nick\n"
+           "Daniel 1 chinese\n"
+           "Clem 1 german\n"
+           "Dwayne 1 french\n"
+           "Anita 1 french\n"
+           "Spruce 1 german\n"
+           "Fred 1 french\n"
+           "Adan 1 chinese\n"
+           "Sven 1 irish\n"
+           "Nick 1 french\n"
+           "Tim 1 irish\n"
+           "Harley 1 english\n"
+           "Mary 1 russian\n"
+           "Kim 1 french\n"
+           "Rashad 1 chinese\n"
+           "Mark 1 french\n";
 
     //    stringstream cin;
     //    cin << "Tabitha  Rolf Derick Ronaldo Tempest Jeanne\n"
@@ -324,35 +361,32 @@ int main()
 //           "Vena 1 arabic \n"
 //           "Eros 1 arabic\n";
 
-    stringstream cin;
-    cin << "Tabitha Mohammad Ronaldo Jeanne Vena Eros\n"
-           "Tabitha 2 tall thin\n"
-           "Rolf 2 blue-eyed glasses\n"
-           "Mohammad 2 thin green-eyed\n"
-           "Jacob 2 blue-eyed blond\n"
-           "Derick 2 glasses red-haired\n"
-           "Meta 2 chubby freckled\n"
-           "Ronaldo 2 tall thin\n"
-           "Melville 2 blue-eyed chubby\n"
-           "Hermon 2 tattooed blond\n"
-           "Tempest 2 chubby freckled\n"
-           "Jeanne 2 thin tall\n"
-           "Kourtney 2 blond tattooed\n"
-           "Dallas 2 glasses freckled\n"
-           "Vena 2 green-eyed thin\n"
-           "Eros 2 thin brown-haired\n";
+//    stringstream cin;
+//    cin << "Tabitha Mohammad Ronaldo Jeanne Vena Eros\n"
+//           "Tabitha 2 tall thin\n"
+//           "Rolf 2 blue-eyed glasses\n"
+//           "Mohammad 2 thin green-eyed\n"
+//           "Jacob 2 blue-eyed blond\n"
+//           "Derick 2 glasses red-haired\n"
+//           "Meta 2 chubby freckled\n"
+//           "Ronaldo 2 tall thin\n"
+//           "Melville 2 blue-eyed chubby\n"
+//           "Hermon 2 tattooed blond\n"
+//           "Tempest 2 chubby freckled\n"
+//           "Jeanne 2 thin tall\n"
+//           "Kourtney 2 blond tattooed\n"
+//           "Dallas 2 glasses freckled\n"
+//           "Vena 2 green-eyed thin\n"
+//           "Eros 2 thin brown-haired\n";
     //endregion
     Timer timer;
     timer.start();
     //region input
-    const int kSuspectCount = 15;
+
 
     string enemy1, enemy2, enemy3, enemy4, enemy5, enemy6;
     cin >> enemy1 >> enemy2 >> enemy3 >> enemy4 >> enemy5 >> enemy6; cin.ignore();
     unordered_set<string> spies ({ enemy1, enemy2, enemy3, enemy4, enemy5, enemy6 });    // temp for input
-
-    // map { id : suspect_name }
-    vector<string> suspect_names(kSuspectCount, "#");
 
     // map {id : feature name}
     vector<string> feature_names;
@@ -366,7 +400,6 @@ int main()
 
     for (int suspect_id = 0; suspect_id < kSuspectCount; suspect_id++) {
         string suspect_name; cin >> suspect_name; cin.ignore();
-        suspect_names.at(suspect_id) = suspect_name;
 
         bool is_spy = spies.count(suspect_name) != 0;
 
@@ -400,17 +433,6 @@ int main()
 
     for (int i = 0; i < features.size(); ++i)
         { assert(features.at(i).id == i); }
-//    cerr << "Suspects: \n";
-//    for (int i = 0; i < suspect_names.size(); ++i) {
-//        cerr << "\t" << suspect_names.at(i);
-//        cerr << (are_spies.at(i) ?
-//            " : spy,\n" : " : innocent,\n");
-//    }
-//
-//    cerr << "features:\n" ;
-//    for (auto& feature : features) {
-//        cerr <<  feature_names.at(feature.id) << " : " << feature.to_string() << "\n";
-//    }
     //endregion
     timer.stopAndPrintResult("parsed input");
 
@@ -418,6 +440,7 @@ int main()
     // and delete states on the fly, after we've added adjacent
     // { state : { , prev state } }
     CameFromMap came_from;
+    came_from.reserve(features.size() * 8);
     const State* winning_state = nullptr;
 
     aStar(came_from, new State(std::move(features), 9, 6, features.size()), winning_state);
@@ -457,15 +480,15 @@ void constructMovePathAndPrintAnswer(
 }
 
 void aStar(CameFromMap& came_from, const State* start_state, const State*& winning_state) {
-    ProfilerStart("./OUTPUT_HERE.prof");
     Timer timer;
     timer.start();
 
     came_from.insert(make_pair(start_state,
                                make_pair(nullptr, Command{ -1, false })));
 
-    priority_queue<const State*, std::vector<const State*>, HeuristicPtrComparator> states;
-    // queue<const State*> states;
+//    vector<const State*> container;
+//    container.reserve(start_state->features().size() * 8);
+    priority_queue<const State*, vector<const State*>, HeuristicPtrComparator> states;
     states.push(start_state);
 
     PossibleMovesCalculator movesCalculator;
@@ -495,8 +518,5 @@ void aStar(CameFromMap& came_from, const State* start_state, const State*& winni
     timer.stopAndPrintResult("\nalgorithm");
     cerr << "states additions: " << states_additions << endl;
     cerr << "states poppings: " << states_poppings << endl;
-
-    ProfilerFlush();
-    ProfilerStop();
 }
 
