@@ -17,19 +17,6 @@ using namespace std::chrono;
 
 //region defs
 
-template <class TInputContainer, class OIter>
-OIter copy(TInputContainer container, OIter out_it) {
-    return copy(container.begin(), container.end(), out_it);
-};
-template <class TIter1, class TIter2>
-bool areDisjoint(TIter1 container, TIter2 other_container) {
-    vector<typename TIter1::value_type> intersection;
-    set_intersection(container.begin(), container.end(),
-                    other_container.begin(), other_container.end(),
-                    intersection.begin());
-
-    return intersection.empty();
-};
 class Timer {
 public:
     void start() {
